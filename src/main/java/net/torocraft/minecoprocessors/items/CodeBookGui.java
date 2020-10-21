@@ -4,7 +4,10 @@
  */
 package net.torocraft.minecoprocessors.items;
 
+import com.mojang.blaze3d.matrix.MatrixStack;
 import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screen.inventory.ContainerScreen;
 import net.minecraft.client.gui.widget.Widget;
@@ -14,6 +17,7 @@ import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.text.ITextProperties;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.torocraft.minecoprocessors.ModConfig;
@@ -143,37 +147,38 @@ public class CodeBookGui extends ContainerScreen<CodeBookContainer>
   }
 
   @Override
-  public void render(int mouseX, int mouseY, float partialTicks)
+  public void render(MatrixStack ms, int mouseX, int mouseY, float partialTicks)
   {
     if(container.close) { minecraft.player.closeScreen(); return; }
-    GlStateManager.color4f(1, 1, 1, 1);
+    RenderSystem.color4f(1, 1, 1, 1);
     tooltip.clear();
-    renderBackground();
+    renderBackground(ms);
     buttonPreviousPage.visible = (data.getSelectedPage() > 0) && (data.getPageCount() > 0);
     buttonNextPage.visible = (data.getSelectedPage() < (data.getPageCount()-1)) || (data.getSelectedPage() == (data.getPageCount()-1) && isCurrentProgramNonEmpty());
     buttonDeletePage.visible = (data.getPageCount() > 1) || isCurrentProgramNonEmpty();
-    super.render(mouseX, mouseY, partialTicks);
+    super.render(ms, mouseX, mouseY, partialTicks);
     if(!tooltip.isEmpty()) {
-      renderTooltip(tooltip, mouseX, mouseY);
+      //TODO: Change tooltip to ITextComponent array
+      //renderToolTip(ms, tooltip, mouseX, mouseY);
     } else {
-      renderHoveredToolTip(mouseX, mouseY);
+      renderHoveredTooltip(ms, mouseX, mouseY);
     }
   }
 
   @Override
-  protected void drawGuiContainerBackgroundLayer(float partialTicks, int mouseX, int mouseY)
+  protected void drawGuiContainerBackgroundLayer(MatrixStack ms, float partialTicks, int mouseX, int mouseY)
   {
-    GlStateManager.color4f(1f, 1f, 1f, 1f);
+    RenderSystem.color4f(1f, 1f, 1f, 1f);
     getMinecraft().getTextureManager().bindTexture(BACKGROUND_IMAGE);
     final int x0=getGuiLeft(), y0=getGuiTop(), w=getXSize(), h=getYSize();
-    blit(x0, y0, 0, 0, w, h);
+    blit(ms, x0, y0, 0, 0, w, h);
   }
 
   @Override
-  protected void drawGuiContainerForegroundLayer(int mouseX, int mouseY)
+  protected void drawGuiContainerForegroundLayer(MatrixStack ms, int mouseX, int mouseY)
   {
-    drawProgram(mouseX, mouseY);
-    drawPageInfo();
+    drawProgram(ms, mouseX, mouseY);
+    drawPageInfo(ms);
   }
 
   @Override
@@ -447,11 +452,11 @@ public class CodeBookGui extends ContainerScreen<CodeBookContainer>
 
   // -------------------------------------------------------------------------------------------------------------------
 
-  private int drawString(String text, int x, int y, int color)
-  { return font.drawString(text, (float)x, (float)y, color); }
+  private int drawString(MatrixStack ms, String text, int x, int y, int color)
+  { return font.drawString(ms, text, (float)x, (float)y, color); }
 
-  private void drawRect(int x, int y, int w, int h, int color)
-  { fill(x,y,w,h,color); }
+  private void drawRect(MatrixStack ms, int x, int y, int w, int h, int color)
+  { fill(ms,x,y,w,h,color); }
 
   void setClipboardString(String text)
   { Minecraft.getInstance().keyboardListener.setClipboardString(text); }
@@ -559,7 +564,7 @@ public class CodeBookGui extends ContainerScreen<CodeBookContainer>
   { return xToColumn(x-getGuiLeft()+2, cursorToLine(y)); }
 
   private int xToColumn(final int x, final int line)
-  { return font.trimStringToWidth(getLine(line).toString(), Math.max(0, x-CODE_POS_X)).length(); }
+  { return font.trimStringToWidth(ITextProperties.func_240652_a_(getLine(line).toString()), Math.max(0, x-CODE_POS_X)).size(); }
 
   private int columnToX(final int line, final int column)
   { return CODE_POS_X + font.getStringWidth(getLine(line).substring(0, Math.min(column, getLine(line).length()))); }
@@ -669,7 +674,7 @@ public class CodeBookGui extends ContainerScreen<CodeBookContainer>
     selectionStart = selectionEnd = Math.max(0, pageCharacterCount());
   }
 
-  private void drawProgram(final int mouseX, final int mouseY)
+  private void drawProgram(MatrixStack ms, final int mouseX, final int mouseY)
   {
     int position = 0;
     for(int lineNumber = 0; lineNumber < lines.size(); lineNumber++) {
@@ -686,53 +691,54 @@ public class CodeBookGui extends ContainerScreen<CodeBookContainer>
         // Number of chars selected in this line.
         final int selected = Math.min(line.length() - prefix, getSelectionEnd() - (position + prefix));
         final String prefixText = line.substring(0, prefix);
-        drawString(prefixText, currX, lineY, getCodeColor());
+        drawString(ms, prefixText, currX, lineY, getCodeColor());
         currX += font.getStringWidth(prefixText);
         final String selectedText = line.substring(prefix, prefix + selected);
         final int selectedWidth = font.getStringWidth(selectedText);
-        drawRect(currX - 1, lineY - 1, currX + selectedWidth, lineY + font.FONT_HEIGHT - 1, getSelectionBackgroundColor());
-        drawString(selectedText, currX, lineY, getSelectionColor());
+        drawRect(ms, currX - 1, lineY - 1, currX + selectedWidth, lineY + font.FONT_HEIGHT - 1, getSelectionBackgroundColor());
+        drawString(ms, selectedText, currX, lineY, getSelectionColor());
         currX += selectedWidth;
         final String postfixString = line.substring(prefix + selected);
-        drawString(postfixString, currX, lineY, getCodeColor());
+        drawString(ms, postfixString, currX, lineY, getCodeColor());
       } else {
         // No selection here, just draw the line. Get it? "draw the line"?
-        drawString(line.toString(), lineX, lineY, getCodeColor());
+        drawString(ms, line.toString(), lineX, lineY, getCodeColor());
       }
       position += line.length() + 1;
       // Instruction hints
       if(lineNumber <= instructionIds.size()) {
         int ip = instructionIds.get(lineNumber);
         if(ip >= 0) {
-          drawString(String.format("%03X", (ip & 0x0fff)), CODE_POS_X+CODE_POS_X_IP_HINT_OFFSET, lineY+1, getInstructionNoColor());
+          drawString(ms, String.format("%03X", (ip & 0x0fff)), CODE_POS_X+CODE_POS_X_IP_HINT_OFFSET, lineY+1, getInstructionNoColor());
         }
       }
     }
     // Part one of error handling, draw red underline, *behind* the blinking cursor.
     if(compileError.size() > 0) {
       for(ParseException exception : compileError) {
-        drawError(exception, mouseX, mouseY);
+        drawError(ms, exception, mouseX, mouseY);
       }
     }
     // Draw selection position in text.
-    drawTextCursor();
+    drawTextCursor(ms);
   }
 
-  private void drawError(ParseException exception, final int mouseX, final int mouseY)
+  private void drawError(MatrixStack ms, ParseException exception, final int mouseX, final int mouseY)
   {
     if(exception.pageNumber != data.getSelectedPage()) return;
     final int localLineNumber = exception.lineNumber;
     final int startX = columnToX(localLineNumber, 0);
     final int rawEndX = columnToX(localLineNumber, getMaxColumns());
     final int startY = CODE_POS_Y + localLineNumber * font.FONT_HEIGHT - 1;
-    final int endX = Math.max(rawEndX, startX + (int)font.getCharWidth(' '));
-    drawRect(startX - 1, startY + font.FONT_HEIGHT - 1, endX, startY + font.FONT_HEIGHT, 0xFFFF3333);
+    //TODO, probably not right
+    final int endX = Math.max(rawEndX, startX + (int)font.getCharacterManager().func_238350_a_(" "));
+    drawRect(ms, startX - 1, startY + font.FONT_HEIGHT - 1, endX, startY + font.FONT_HEIGHT, 0xFFFF3333);
     if((mouseX >= startX) && (mouseX <= endX) && (mouseY >= startY) && (mouseY <= (startY + font.FONT_HEIGHT))) {
       tooltip.add(exception.message);
     }
   }
 
-  private void drawTextCursor()
+  private void drawTextCursor(MatrixStack ms)
   {
     if(System.currentTimeMillis() % 800 <= 400) {
       final int line = indexToLine(selectionEnd);
@@ -740,15 +746,15 @@ public class CodeBookGui extends ContainerScreen<CodeBookContainer>
       final StringBuilder sb = (line<lines.size()) ? (getLine(line)) : (new StringBuilder());
       final int x = CODE_POS_X + font.getStringWidth(sb.substring(0, column)) - 1;
       final int y = CODE_POS_Y + line * font.FONT_HEIGHT - 1;
-      drawRect(x + 1, y + 1, x + 2 + 1, y + font.FONT_HEIGHT + 1, 0xCC333333);
-      drawRect(x, y, x + 2, y + font.FONT_HEIGHT, getSelectionColor());
+      drawRect(ms, x + 1, y + 1, x + 2 + 1, y + font.FONT_HEIGHT + 1, 0xCC333333);
+      drawRect(ms, x, y, x + 2, y + font.FONT_HEIGHT, getSelectionColor());
     }
   }
 
-  private void drawPageInfo()
+  private void drawPageInfo(MatrixStack ms)
   {
     String pageInfo = String.format("%d/%d", data.getSelectedPage() + 1, data.getPageCount());
-    drawString(pageInfo, PAGE_NUMBER_X - (font.getStringWidth(pageInfo)/2), PAGE_NUMBER_Y, getCodeColor());
+    drawString(ms, pageInfo, PAGE_NUMBER_X - (font.getStringWidth(pageInfo)/2), PAGE_NUMBER_Y, getCodeColor());
   }
 
   private void undo()

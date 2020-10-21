@@ -27,6 +27,8 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.event.RegistryEvent;
 
 
+import net.minecraft.block.AbstractBlock;
+
 @SuppressWarnings("unused")
 public class ModContent
 {
@@ -36,12 +38,12 @@ public class ModContent
 
   public static final MinecoprocessorBlock MINECOPROCESSOR = (MinecoprocessorBlock)(new MinecoprocessorBlock(
     MinecoprocessorBlock.CONFIG_DEFAULT,
-    Block.Properties.create(Material.MISCELLANEOUS).hardnessAndResistance(0f).sound(SoundType.STONE).notSolid()
+    AbstractBlock.Properties.create(Material.MISCELLANEOUS).hardnessAndResistance(0f).sound(SoundType.STONE).notSolid()
   )).setRegistryName(new ResourceLocation(ModMinecoprocessors.MODID, "processor"));
 
   public static final MinecoprocessorBlock MINECOPROCESSOR_OVERCLOCKED = (MinecoprocessorBlock)(new MinecoprocessorBlock(
     MinecoprocessorBlock.CONFIG_OVERCLOCKED,
-    Block.Properties.create(Material.MISCELLANEOUS).hardnessAndResistance(0f).sound(SoundType.STONE).notSolid()
+    AbstractBlock.Properties.create(Material.MISCELLANEOUS).hardnessAndResistance(0f).sound(SoundType.STONE).notSolid()
   )).setRegistryName(new ResourceLocation(ModMinecoprocessors.MODID, "overclocked_processor"));
 
   private static final Block MOD_BLOCKS[] = {
@@ -108,7 +110,7 @@ public class ModContent
     for(Block e:MOD_BLOCKS) {
       ResourceLocation rl = e.getRegistryName();
       if(rl == null) continue;
-      event.getRegistry().register(new BlockItem(e, (new BlockItem.Properties().group(ModMinecoprocessors.ITEMGROUP))).setRegistryName(rl));
+      event.getRegistry().register(new BlockItem(e, (new Item.Properties().group(ModMinecoprocessors.ITEMGROUP))).setRegistryName(rl));
     }
   }
 

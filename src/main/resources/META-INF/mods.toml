@@ -3,6 +3,7 @@
 modLoader="javafml"
 loaderVersion="[28,)"
 issueTrackerURL="https://github.com/ToroCraft/Minecoprocessors/issues/"
+license="MIT"
 
 [[mods]]
 modId="minecoprocessors"
@@ -14,6 +15,7 @@ authors="ToroCraft"
 #updateJSONURL="https://github.com/ToroCraft/Minecoprocessors/meta/update.json"
 displayURL="https://github.com/ToroCraft/Minecoprocessors"
 logoFile="logo.png"
+license="MIT"
 
 [[dependencies.minecoprocessors]]
   modId="forge"
@@ -25,6 +27,6 @@ logoFile="logo.png"
 [[dependencies.minecoprocessors]]
   modId="minecraft"
   mandatory=true
-  versionRange="[1.15.2]"
+  versionRange="[1.16.2, )"
   ordering="NONE"
   side="BOTH"
