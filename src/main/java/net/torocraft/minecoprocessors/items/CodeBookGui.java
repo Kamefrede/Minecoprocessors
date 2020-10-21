@@ -737,9 +737,9 @@ public class CodeBookGui extends ContainerScreen<CodeBookContainer> {
 		final int rawEndX = columnToX(localLineNumber, getMaxColumns());
 		final int startY = CODE_POS_Y + localLineNumber * font.FONT_HEIGHT - 1;
 		//TODO, probably not right
-		final int endX = Math.max(rawEndX, startX + (int) font.getCharacterManager().func_238350_a_(" "));
+		final int endX = Math.max(rawEndX, startX + font.getStringWidth(" "));
 		drawRect(ms, startX - 1, startY + font.FONT_HEIGHT - 1, endX, startY + font.FONT_HEIGHT, 0xFFFF3333);
-		if ((mouseX >= startX) && (mouseX <= endX) && (mouseY >= startY) && (mouseY <= (startY + font.FONT_HEIGHT))) {
+		if ((mouseX >= GUI_WIDTH + startX - endX / 2) && (mouseX <= GUI_WIDTH + endX + startX / 2 - startX) && (mouseY >= startY) && (mouseY <= (startY + font.FONT_HEIGHT))) {
 			tooltip.add(ITextComponent.getTextComponentOrEmpty(exception.message));
 		}
 	}
