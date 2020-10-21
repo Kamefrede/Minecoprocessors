@@ -6,7 +6,10 @@
  */
 package net.torocraft.minecoprocessors.blocks;
 
-import net.minecraft.block.*;
+import net.minecraft.block.AbstractBlock;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.HorizontalBlock;
 import net.minecraft.block.material.PushReaction;
 import net.minecraft.entity.EntitySpawnPlacementRegistry;
 import net.minecraft.entity.EntityType;
@@ -18,12 +21,15 @@ import net.minecraft.fluid.FluidState;
 import net.minecraft.inventory.container.INamedContainerProvider;
 import net.minecraft.item.BlockItemUseContext;
 import net.minecraft.item.ItemStack;
-import net.minecraft.loot.LootContext;
 import net.minecraft.state.BooleanProperty;
 import net.minecraft.state.StateContainer;
 import net.minecraft.state.properties.BlockStateProperties;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.*;
+import net.minecraft.util.ActionResultType;
+import net.minecraft.util.Direction;
+import net.minecraft.util.Hand;
+import net.minecraft.util.Mirror;
+import net.minecraft.util.Rotation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.BlockRayTraceResult;
 import net.minecraft.util.math.shapes.ISelectionContext;
@@ -33,213 +39,209 @@ import net.minecraft.world.Explosion;
 import net.minecraft.world.IBlockReader;
 import net.minecraft.world.IWorldReader;
 import net.minecraft.world.World;
-import net.minecraft.world.server.ServerWorld;
 import net.minecraftforge.common.util.FakePlayer;
 import net.minecraftforge.fml.network.NetworkHooks;
 import net.torocraft.minecoprocessors.ModContent;
+
 import javax.annotation.Nullable;
-import java.util.Collections;
-import java.util.List;
-import java.util.Random;
 
 
-public class MinecoprocessorBlock extends HorizontalBlock
-{
-  public static final long CONFIG_DEFAULT     = 0x0000000000000000L;
-  public static final long CONFIG_OVERCLOCKED = 0x0000000000000001L;  // It's the overclocked version
-  public final long config;
+public class MinecoprocessorBlock extends HorizontalBlock {
+	public static final long CONFIG_DEFAULT = 0x0000000000000000L;
+	public static final long CONFIG_OVERCLOCKED = 0x0000000000000001L;  // It's the overclocked version
+	public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
+	protected static final VoxelShape SHAPE = Block.makeCuboidShape(0, 0, 0, 16, 3, 16);
 
-  public MinecoprocessorBlock(long config, AbstractBlock.Properties properties)
-  { super(properties); this.config = config; }
+	// Block -------------------------------------------------------------------------------------------------------------
+	public final long config;
+	public MinecoprocessorBlock(long config, AbstractBlock.Properties properties) {
+		super(properties);
+		this.config = config;
+	}
 
-  // Block -------------------------------------------------------------------------------------------------------------
+	private static boolean dropBlock(BlockState state, World world, BlockPos pos, @Nullable PlayerEntity player) {
+		if (!(state.getBlock() instanceof MinecoprocessorBlock)) {
+			world.removeBlock(pos, false);
+			return true;
+		}
+		if (!world.isRemote()) {
+			if ((player == null) || (!player.isCreative())) {
+				world.addEntity(new ItemEntity(world, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, new ItemStack(state.getBlock().asItem())));
+			}
+			if (world.getTileEntity(pos) instanceof MinecoprocessorTileEntity) {
+				ItemStack book = ((MinecoprocessorTileEntity) world.getTileEntity(pos)).getStackInSlot(0);
+				if (!book.isEmpty())
+					world.addEntity(new ItemEntity(world, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, book));
+			}
+		}
+		world.removeTileEntity(pos);
+		world.removeBlock(pos, false);
+		return true;
+	}
 
-  protected static final VoxelShape SHAPE = Block.makeCuboidShape(0,0,0, 16,3,16);
-  public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
+	@Override
+	@SuppressWarnings("deprecation")
+	public VoxelShape getShape(BlockState state, IBlockReader source, BlockPos pos, ISelectionContext selectionContext) {
+		return SHAPE;
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public VoxelShape getShape(BlockState state, IBlockReader source, BlockPos pos, ISelectionContext selectionContext)
-  { return SHAPE; }
+	@Override
+	public boolean canSpawnInBlock() {
+		return false;
+	}
 
+	@Override
+	public boolean canCreatureSpawn(BlockState state, IBlockReader world, BlockPos pos, EntitySpawnPlacementRegistry.PlacementType type, @Nullable EntityType<?> entityType) {
+		return false;
+	}
 
-  //TODO: Alternative to isNormalCube
-  //TODO: Alternative to tickrate
-  @Override
-  public boolean canSpawnInBlock()
-  { return false; }
+	@Override
+	@SuppressWarnings("deprecation")
+	public PushReaction getPushReaction(BlockState state) {
+		return PushReaction.DESTROY;
+	}
 
-  @Override
-  public boolean canCreatureSpawn(BlockState state, IBlockReader world, BlockPos pos, EntitySpawnPlacementRegistry.PlacementType type, @Nullable EntityType<?> entityType) {
-    return false;
-  }
+	@Override
+	protected void fillStateContainer(StateContainer.Builder<Block, BlockState> builder) {
+		super.fillStateContainer(builder);
+		builder.add(HORIZONTAL_FACING, POWERED);
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public PushReaction getPushReaction(BlockState state)
-  { return PushReaction.DESTROY; }
+	@Override
+	@SuppressWarnings("deprecation")
+	public boolean isValidPosition(BlockState state, IWorldReader world, BlockPos pos) {
+		return hasSolidSideOnTop(world, pos.down());
+	}
 
-  @Override
-  protected void fillStateContainer(StateContainer.Builder<Block, BlockState> builder)
-  { super.fillStateContainer(builder); builder.add(HORIZONTAL_FACING, POWERED); }
+	@Override
+	@Nullable
+	public BlockState getStateForPlacement(BlockItemUseContext context) {
+		Direction facing = context.getPlacementHorizontalFacing();
+		return super.getStateForPlacement(context).with(HORIZONTAL_FACING, facing).with(POWERED, false);
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public boolean isValidPosition(BlockState state, IWorldReader world, BlockPos pos)
-  { return hasSolidSideOnTop(world, pos.down()); }
+	@Override
+	public void onBlockPlacedBy(World world, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+		super.onBlockPlacedBy(world, pos, state, placer, stack);
+		if (world.isRemote()) return;
+		final TileEntity te = world.getTileEntity(pos);
+		if (!(te instanceof MinecoprocessorTileEntity)) return;
+		if (stack.hasDisplayName()) {
+			((MinecoprocessorTileEntity) te).setCustomName(stack.getDisplayName());
+		}
+	}
 
-  @Override
-  @Nullable
-  public BlockState getStateForPlacement(BlockItemUseContext context)
-  {
-    Direction facing = context.getPlacementHorizontalFacing();
-    return super.getStateForPlacement(context).with(HORIZONTAL_FACING, facing).with(POWERED, false);
-  }
+	@Override
+	@SuppressWarnings("deprecation")
+	public void onReplaced(BlockState state, World world, BlockPos pos, BlockState newState, boolean isMoving) {
+		super.onReplaced(state, world, pos, newState, isMoving);
+		if ((!world.isRemote()) && (newState.getBlock() != state.getBlock())) {
+			world.notifyNeighborsOfStateChange(pos, newState.getBlock());
+			for (Direction side : Direction.values()) {
+				world.notifyNeighborsOfStateExcept(pos.offset(side), newState.getBlock(), side.getOpposite());
+			}
+		}
+	}
 
-  @Override
-  public void onBlockPlacedBy(World world, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack)
-  {
-    super.onBlockPlacedBy(world, pos, state, placer, stack);
-    if(world.isRemote()) return;
-    final TileEntity te = world.getTileEntity(pos);
-    if(!(te instanceof MinecoprocessorTileEntity)) return;
-    if(stack.hasDisplayName()) {
-      ((MinecoprocessorTileEntity)te).setCustomName(stack.getDisplayName());
-    }
-  }
+	@Override
+	@SuppressWarnings("deprecation")
+	public BlockState rotate(BlockState state, Rotation rot) {
+		return state.with(HORIZONTAL_FACING, rot.rotate(state.get(HORIZONTAL_FACING)));
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public void onReplaced(BlockState state, World world, BlockPos pos, BlockState newState, boolean isMoving)
-  {
-    super.onReplaced(state, world, pos, newState, isMoving);
-    if((!world.isRemote()) && (newState.getBlock() != state.getBlock())) {
-      world.notifyNeighborsOfStateChange(pos, newState.getBlock());
-      for(Direction side: Direction.values()) {
-        world.notifyNeighborsOfStateExcept(pos.offset(side), newState.getBlock(), side.getOpposite());
-      }
-    }
-  }
+	@Override
+	@SuppressWarnings("deprecation")
+	public BlockState mirror(BlockState state, Mirror mirrorIn) {
+		return state;
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public BlockState rotate(BlockState state, Rotation rot)
-  { return state.with(HORIZONTAL_FACING, rot.rotate(state.get(HORIZONTAL_FACING))); }
+	@Override
+	public boolean shouldCheckWeakPower(BlockState state, IWorldReader world, BlockPos pos, Direction side) {
+		return false;
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public BlockState mirror(BlockState state, Mirror mirrorIn)
-  { return state; }
+	@Override
+	@SuppressWarnings("deprecation")
+	public boolean canProvidePower(BlockState state) {
+		return true;
+	}
 
-  @Override
-  public boolean shouldCheckWeakPower(BlockState state, IWorldReader world, BlockPos pos, Direction side)
-  { return false; }
+	@Override
+	public boolean canConnectRedstone(BlockState state, IBlockReader world, BlockPos pos, @Nullable Direction side) {
+		return true;
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public boolean canProvidePower(BlockState state)
-  { return true; }
+	@Override
+	@SuppressWarnings("deprecation")
+	public boolean hasComparatorInputOverride(BlockState state) {
+		return false;
+	}
 
-  @Override
-  public boolean canConnectRedstone(BlockState state, IBlockReader world, BlockPos pos, @Nullable Direction side)
-  { return true; }
+	@Override
+	public boolean getWeakChanges(BlockState state, IWorldReader world, BlockPos pos) {
+		return true;
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public boolean hasComparatorInputOverride(BlockState state)
-  { return false; }
+	@Override
+	@SuppressWarnings("deprecation")
+	public int getWeakPower(BlockState state, IBlockReader world, BlockPos pos, Direction side) {
+		return getPower(state, world, pos, side, false);
+	}
 
-  @Override
-  public boolean getWeakChanges(BlockState state, IWorldReader world, BlockPos pos)
-  { return true; }
+	@Override
+	@SuppressWarnings("deprecation")
+	public int getStrongPower(BlockState state, IBlockReader world, BlockPos pos, Direction side) {
+		return getPower(state, world, pos, side, true);
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public int getWeakPower(BlockState state, IBlockReader world, BlockPos pos, Direction side)
-  { return getPower(state, world, pos, side, false); }
+	@Override
+	public boolean hasTileEntity(BlockState state) {
+		return true;
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public int getStrongPower(BlockState state, IBlockReader world, BlockPos pos, Direction side)
-  { return getPower(state, world, pos, side, true); }
+	@Override
+	public TileEntity createTileEntity(BlockState state, IBlockReader world) {
+		return new MinecoprocessorTileEntity(ModContent.TET_MINECOPROCESSOR);
+	}
 
-  @Override
-  public boolean hasTileEntity(BlockState state)
-  { return true; }
+	@Override
+	@SuppressWarnings("deprecation")
+	public void neighborChanged(BlockState state, World world, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
+		if (world.isRemote()) return;
+		super.neighborChanged(state, world, pos, block, fromPos, isMoving);
+		final Vector3i directionVector = fromPos.subtract(pos);
+		if (isMoving || (directionVector.getY() != 0)) return; // nothing to do then.
+		final TileEntity te = world.getTileEntity(pos);
+		if (te instanceof MinecoprocessorTileEntity) ((MinecoprocessorTileEntity) te).neighborChanged(fromPos);
+	}
 
-  @Override
-  public TileEntity createTileEntity(BlockState state, IBlockReader world)
-  { return new MinecoprocessorTileEntity(ModContent.TET_MINECOPROCESSOR); }
+	@Override
+	@SuppressWarnings("deprecation")
+	public ActionResultType onBlockActivated(BlockState state, World world, BlockPos pos, PlayerEntity player, Hand hand, BlockRayTraceResult rayTraceResult) {
+		if (world.isRemote) return ActionResultType.SUCCESS;
+		final TileEntity te = world.getTileEntity(pos);
+		if (!(te instanceof MinecoprocessorTileEntity)) return ActionResultType.FAIL;
+		if ((!(player instanceof ServerPlayerEntity) && (!(player instanceof FakePlayer))))
+			return ActionResultType.FAIL;
+		NetworkHooks.openGui((ServerPlayerEntity) player, (INamedContainerProvider) te);
+		return ActionResultType.SUCCESS;
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public void neighborChanged(BlockState state, World world, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving)
-  {
-    if(world.isRemote()) return;
-    super.neighborChanged(state, world, pos, block, fromPos, isMoving);
-    final Vector3i directionVector = fromPos.subtract(pos);
-    if(isMoving || (directionVector.getY() != 0)) return; // nothing to do then.
-    final TileEntity te = world.getTileEntity(pos);
-    if(te instanceof MinecoprocessorTileEntity) ((MinecoprocessorTileEntity)te).neighborChanged(fromPos);
-  }
+	@Override
+	public boolean removedByPlayer(BlockState state, World world, BlockPos pos, PlayerEntity player, boolean willHarvest, FluidState fluid) {
+		return dropBlock(state, world, pos, player);
+	}
 
-  @Override
-  @SuppressWarnings("deprecation")
-  public ActionResultType onBlockActivated(BlockState state, World world, BlockPos pos, PlayerEntity player, Hand hand, BlockRayTraceResult rayTraceResult)
-  {
-    if(world.isRemote) return ActionResultType.SUCCESS;
-    final TileEntity te = world.getTileEntity(pos);
-    if(!(te instanceof MinecoprocessorTileEntity)) return ActionResultType.FAIL;
-    if((!(player instanceof ServerPlayerEntity) && (!(player instanceof FakePlayer)))) return ActionResultType.FAIL;
-    NetworkHooks.openGui((ServerPlayerEntity)player,(INamedContainerProvider)te);
-    return ActionResultType.SUCCESS;
-  }
+	// -------------------------------------------------------------------------------------------------------------------
 
-  @Override
-  public boolean removedByPlayer(BlockState state, World world, BlockPos pos, PlayerEntity player, boolean willHarvest, FluidState fluid) {
-    return dropBlock(state, world, pos, player);
-  }
+	@Override
+	public void onExplosionDestroy(World world, BlockPos pos, Explosion explosion) {
+		dropBlock(world.getBlockState(pos), world, pos, null);
+	}
 
-  @Override
-  public void onExplosionDestroy(World world, BlockPos pos, Explosion explosion)
-  { dropBlock(world.getBlockState(pos), world, pos, null); }
-
-  @Override
-  public List<ItemStack> getDrops(BlockState state, LootContext.Builder builder) {
-    return Collections.singletonList(ItemStack.EMPTY);
-  }
-
-  @Override
-  @SuppressWarnings("deprecation")
-  public void tick(BlockState state, ServerWorld world, BlockPos pos, Random rand)
-  {}
-
-  // -------------------------------------------------------------------------------------------------------------------
-
-  private int getPower(BlockState state, IBlockReader world, BlockPos pos, Direction side, boolean strong)
-  {
-    final TileEntity te = world.getTileEntity(pos);
-    if(!(te instanceof MinecoprocessorTileEntity)) return 0;
-    return ((MinecoprocessorTileEntity)te).getPower(state, side, strong);
-  }
-
-  private static boolean dropBlock(BlockState state, World world, BlockPos pos, @Nullable PlayerEntity player)
-  {
-    if(!(state.getBlock() instanceof MinecoprocessorBlock)) {
-      world.removeBlock(pos, false);
-      return true;
-    }
-    if(!world.isRemote()) {
-      if((player==null) || (!player.isCreative())) {
-        world.addEntity(new ItemEntity(world, pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5, new ItemStack(state.getBlock().asItem())));
-      }
-      if(world.getTileEntity(pos) instanceof MinecoprocessorTileEntity) {
-        ItemStack book = ((MinecoprocessorTileEntity)world.getTileEntity(pos)).getStackInSlot(0);
-        if(!book.isEmpty()) world.addEntity(new ItemEntity(world, pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5, book));
-      }
-    }
-    world.removeTileEntity(pos);
-    world.removeBlock(pos, false);
-    return true;
-  }
+	private int getPower(BlockState state, IBlockReader world, BlockPos pos, Direction side, boolean strong) {
+		final TileEntity te = world.getTileEntity(pos);
+		if (!(te instanceof MinecoprocessorTileEntity)) return 0;
+		return ((MinecoprocessorTileEntity) te).getPower(state, side, strong);
+	}
 }

@@ -6,16 +6,18 @@
  */
 package net.torocraft.minecoprocessors;
 
+import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.container.ContainerType;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemGroup;
+import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntityType;
 import net.minecraft.util.text.TranslationTextComponent;
 import net.minecraft.world.World;
-import net.minecraft.block.Block;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -24,12 +26,13 @@ import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
 import net.torocraft.minecoprocessors.network.Networking;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
 import javax.annotation.Nullable;
+
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -38,134 +41,170 @@ import java.util.stream.Collectors;
 
 
 @Mod("minecoprocessors")
-public class ModMinecoprocessors
-{
-  public static final String MODID = "minecoprocessors";
-  public static final String MODNAME = "Minecoprocessors";
-  public static final int VERSION_DATAFIXER = 0;
-  private static final Logger LOGGER = LogManager.getLogger();
+public class ModMinecoprocessors {
+	public static final String MODID = "minecoprocessors";
+	public static final String MODNAME = "Minecoprocessors";
+	public static final int VERSION_DATAFIXER = 0;
+	public static final ISidedProxy proxy = DistExecutor.runForDist(() -> ClientProxy::new, () -> ServerProxy::new);
 
-  // -------------------------------------------------------------------------------------------------------------------
+	// -------------------------------------------------------------------------------------------------------------------
+	public static final ItemGroup ITEMGROUP = (new ItemGroup("tab" + MODID) {
+		@OnlyIn(Dist.CLIENT)
+		public ItemStack createIcon() {
+			return new ItemStack(ModContent.MINECOPROCESSOR);
+		}
+	});
 
-  public ModMinecoprocessors()
-  {
-    logGitVersion();
-    MinecraftForge.EVENT_BUS.register(this);
-    // ModLoadingContext.get().registerConfig(net.minecraftforge.fml.config.ModConfig.Type.COMMON, ModConfig.COMMON_CONFIG_SPEC); not needed yet
-    ModLoadingContext.get().registerConfig(net.minecraftforge.fml.config.ModConfig.Type.CLIENT, ModConfig.CLIENT_CONFIG_SPEC);
-  }
+	// -------------------------------------------------------------------------------------------------------------------
+	private static final Logger LOGGER = LogManager.getLogger();
 
-  // -------------------------------------------------------------------------------------------------------------------
+	// -------------------------------------------------------------------------------------------------------------------
+	// Events
+	// -------------------------------------------------------------------------------------------------------------------
 
-  public static final Logger logger() { return LOGGER; }
+	public ModMinecoprocessors() {
+		logGitVersion();
+		MinecraftForge.EVENT_BUS.register(this);
+		// ModLoadingContext.get().registerConfig(net.minecraftforge.fml.config.ModConfig.Type.COMMON, ModConfig.COMMON_CONFIG_SPEC); not needed yet
+		ModLoadingContext.get().registerConfig(net.minecraftforge.fml.config.ModConfig.Type.CLIENT, ModConfig.CLIENT_CONFIG_SPEC);
+	}
 
-  // -------------------------------------------------------------------------------------------------------------------
-  // Events
-  // -------------------------------------------------------------------------------------------------------------------
+	// -------------------------------------------------------------------------------------------------------------------
+	// Sided proxy functionality
+	// -------------------------------------------------------------------------------------------------------------------
 
-  @Mod.EventBusSubscriber(bus=Mod.EventBusSubscriber.Bus.MOD)
-  public static final class ForgeEvents
-  {
-    @SubscribeEvent
-    public static final void onBlocksRegistry(final RegistryEvent.Register<Block> event)
-    { ModContent.registerBlocks(event); }
+	public static final Logger logger() {
+		return LOGGER;
+	}
 
-    @SubscribeEvent
-    public static final void onItemRegistry(final RegistryEvent.Register<Item> event)
-    { ModContent.registerBlockItems(event); ModContent.registerItems(event); }
+	public static void logGitVersion() {
+		try {
+			InputStream is = ModMinecoprocessors.class.getResourceAsStream("/.gitversion-" + MODID);
+			if (is == null) return;
+			BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+			String version = br.lines().collect(Collectors.joining("\n"));
+			LOGGER.info(MODNAME + ((version.isEmpty()) ? (" (dev build)") : (" GIT id #" + version)) + ".");
+		} catch (Throwable e) {
+			return; // don't log resource not there.
+		}
+	}
 
-    @SubscribeEvent
-    public static final void onTileEntityRegistry(final RegistryEvent.Register<TileEntityType<?>> event)
-    { ModContent.registerTileEntities(event); }
+	public interface ISidedProxy {
+		default @Nullable
+		PlayerEntity getPlayerClientSide() {
+			return null;
+		}
 
-    @SubscribeEvent
-    public static final void onRegisterContainerTypes(final RegistryEvent.Register<ContainerType<?>> event)
-    { ModContent.registerContainers(event); }
+		default @Nullable
+		World getWorldClientSide() {
+			return null;
+		}
 
-    @SubscribeEvent
-    public static void onCommonSetup(final FMLCommonSetupEvent event)
-    {
-      ModConfig.apply();
-      Networking.init();
-    }
+		default @Nullable
+		Minecraft mc() {
+			return null;
+		}
 
-    @SubscribeEvent
-    public static void onClientSetup(final FMLClientSetupEvent event)
-    {
-      ModContent.registerGuis(event);
-      ModContent.processContentClientSide(event);
-    }
+		default void handleUnexpectedException(Exception e) {
+			e.printStackTrace();
+		}
+	}
 
-    @SubscribeEvent
-    public static void onConfigLoad(net.minecraftforge.fml.config.ModConfig.Loading event)
-    { ModConfig.onLoad(event.getConfig()); }
+	@Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.MOD)
+	public static final class ForgeEvents {
+		@SubscribeEvent
+		public static final void onBlocksRegistry(final RegistryEvent.Register<Block> event) {
+			ModContent.registerBlocks(event);
+		}
 
-    @SubscribeEvent
-    public static void onConfigChanged(net.minecraftforge.fml.config.ModConfig.Reloading event)
-    { ModConfig.onFileChange(event.getConfig()); }
+		@SubscribeEvent
+		public static final void onItemRegistry(final RegistryEvent.Register<Item> event) {
+			ModContent.registerBlockItems(event);
+			ModContent.registerItems(event);
+		}
 
-  }
+		@SubscribeEvent
+		public static final void onTileEntityRegistry(final RegistryEvent.Register<TileEntityType<?>> event) {
+			ModContent.registerTileEntities(event);
+		}
 
-  // -------------------------------------------------------------------------------------------------------------------
-  // Sided proxy functionality
-  // -------------------------------------------------------------------------------------------------------------------
+		@SubscribeEvent
+		public static final void onRegisterContainerTypes(final RegistryEvent.Register<ContainerType<?>> event) {
+			ModContent.registerContainers(event);
+		}
 
-  public static final ISidedProxy proxy = DistExecutor.runForDist(()->ClientProxy::new, ()->ServerProxy::new);
+		@SubscribeEvent
+		public static void onCommonSetup(final FMLCommonSetupEvent event) {
+			ModConfig.apply();
+			Networking.init();
+		}
 
-  public interface ISidedProxy
-  {
-    default @Nullable PlayerEntity getPlayerClientSide() { return null; }
-    default @Nullable World getWorldClientSide() { return null; }
-    default @Nullable Minecraft mc() { return null; }
-    default void handleUnexpectedException(Exception e) { e.printStackTrace(); }
-  }
+		@SubscribeEvent
+		public static void onClientSetup(final FMLClientSetupEvent event) {
+			ModContent.registerGuis(event);
+			ModContent.processContentClientSide(event);
+		}
 
-  public static final class ClientProxy implements ISidedProxy
-  {
-    public @Nullable PlayerEntity getPlayerClientSide() { return Minecraft.getInstance().player; }
-    public @Nullable World getWorldClientSide() { return Minecraft.getInstance().world; }
-    public @Nullable Minecraft mc() { return Minecraft.getInstance(); }
+		@SubscribeEvent
+		public static void onConfigLoad(net.minecraftforge.fml.config.ModConfig.Loading event) {
+			ModConfig.onLoad(event.getConfig());
+		}
 
-    private static boolean toldPlayerAboutException = false;
-    public void handleUnexpectedException(Exception e) {
-      if(!toldPlayerAboutException) {
-        toldPlayerAboutException = true;
-        Minecraft.getInstance().ingameGUI.getChatGUI().printChatMessage(new TranslationTextComponent("minecoprocessors.error_chat"));
-      }
-    }
-  }
+		@SubscribeEvent
+		public static void onConfigChanged(net.minecraftforge.fml.config.ModConfig.Reloading event) {
+			ModConfig.onFileChange(event.getConfig());
+		}
 
-  public static final class ServerProxy implements ISidedProxy
-  {
-    public @Nullable PlayerEntity getPlayerClientSide() { return null; }
-    public @Nullable World getWorldClientSide() { return null; }
-    public @Nullable Minecraft mc() { return null; }
-  }
+	}
 
-  // -------------------------------------------------------------------------------------------------------------------
-  // Item group / creative tab
-  // -------------------------------------------------------------------------------------------------------------------
+	// -------------------------------------------------------------------------------------------------------------------
+	// Item group / creative tab
+	// -------------------------------------------------------------------------------------------------------------------
 
-  public static final ItemGroup ITEMGROUP = (new ItemGroup("tab" + MODID) {
-    @OnlyIn(Dist.CLIENT)
-    public ItemStack createIcon()
-    { return new ItemStack(ModContent.MINECOPROCESSOR); }
-  });
+	public static final class ClientProxy implements ISidedProxy {
+		private static boolean toldPlayerAboutException = false;
 
-  // -------------------------------------------------------------------------------------------------------------------
-  // Version info
-  // -------------------------------------------------------------------------------------------------------------------
+		public @Nullable
+		PlayerEntity getPlayerClientSide() {
+			return Minecraft.getInstance().player;
+		}
 
-  public static void logGitVersion()
-  {
-    try {
-      InputStream is = ModMinecoprocessors.class.getResourceAsStream("/.gitversion-" + MODID);
-      if(is==null) return;
-      BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
-      String version = br.lines().collect(Collectors.joining("\n"));
-      LOGGER.info(MODNAME + ((version.isEmpty())?(" (dev build)"):(" GIT id #"+version)) + ".");
-    } catch(Throwable e) {
-      return; // don't log resource not there.
-    }
-  }
+		public @Nullable
+		World getWorldClientSide() {
+			return Minecraft.getInstance().world;
+		}
+
+		public @Nullable
+		Minecraft mc() {
+			return Minecraft.getInstance();
+		}
+
+		public void handleUnexpectedException(Exception e) {
+			if (!toldPlayerAboutException) {
+				toldPlayerAboutException = true;
+				Minecraft.getInstance().ingameGUI.getChatGUI().printChatMessage(new TranslationTextComponent("minecoprocessors.error_chat"));
+			}
+		}
+	}
+
+	// -------------------------------------------------------------------------------------------------------------------
+	// Version info
+	// -------------------------------------------------------------------------------------------------------------------
+
+	public static final class ServerProxy implements ISidedProxy {
+		public @Nullable
+		PlayerEntity getPlayerClientSide() {
+			return null;
+		}
+
+		public @Nullable
+		World getWorldClientSide() {
+			return null;
+		}
+
+		public @Nullable
+		Minecraft mc() {
+			return null;
+		}
+	}
 }
